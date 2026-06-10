@@ -1,0 +1,39 @@
+appId: com.carbon.clipboard
+productName: Carbon
+copyright: Copyright © 2026
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+# Asar keeps the app packaged in a single archive.
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-Setup-${version}.${ext}
+  # Place an icon at build/icon.ico to brand the app and installer.
+  # icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Carbon
+
+# Auto-update via GitHub Releases.
+# Replace owner/repo with your GitHub repository, then `npm run build:win`
+# and upload the artifacts (or use `electron-builder --publish always`).
+publish:
+  provider: github
+  owner: YOUR_GITHUB_USERNAME
+  repo: carbon
