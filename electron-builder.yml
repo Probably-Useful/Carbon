@@ -13,14 +13,19 @@ files:
 # Asar keeps the app packaged in a single archive.
 asar: true
 
+# better-sqlite3 is a native module; its compiled binary must live outside the
+# asar archive so it can be loaded at runtime. Native deps are rebuilt against
+# Electron automatically on install (npmRebuild defaults to true).
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+
 win:
   target:
     - target: nsis
       arch:
         - x64
   artifactName: ${productName}-Setup-${version}.${ext}
-  # Place an icon at build/icon.ico to brand the app and installer.
-  # icon: build/icon.ico
+  icon: build/icon.ico
 
 nsis:
   oneClick: false

@@ -1,10 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
-  ClipPayload,
+  Analytics,
+  ClipCursor,
+  ClipPage,
   ClipRecord,
+  ClipTypeFilter,
   DataDirResult,
+  DayDetail,
   HotkeyResult,
-  Settings
+  Settings,
+  Stats
 } from '../shared/types'
 
 const api = {
@@ -31,8 +36,41 @@ const api = {
   },
 
   // --- Clip data ---
-  getClips(): Promise<ClipRecord[]> {
-    return ipcRenderer.invoke('clips:getAll')
+  /** Every pinned clip (always fetched in full — pinned is a small, curated set). */
+  getPinned(): Promise<ClipRecord[]> {
+    return ipcRenderer.invoke('clips:getPinned')
+  },
+  /** One page of the non-pinned timeline, newest first. Pass the previous
+   * page's `nextCursor` to fetch the next one. */
+  getPage(
+    filter: ClipTypeFilter,
+    from: string,
+    to: string,
+    cursor?: ClipCursor
+  ): Promise<ClipPage> {
+    return ipcRenderer.invoke('clips:getPage', { filter, from, to, cursor })
+  },
+  /** Lazily load a single clip's image as a data URL. */
+  getImage(id: number): Promise<string | null> {
+    return ipcRenderer.invoke('clips:getImage', id)
+  },
+  /** Full-text search over clip text (FTS5-backed), keyset-paginated like getPage. */
+  searchClips(
+    query: string,
+    filter: ClipTypeFilter,
+    from: string,
+    to: string,
+    cursor?: ClipCursor
+  ): Promise<ClipPage> {
+    return ipcRenderer.invoke('clips:search', query, filter, from, to, cursor)
+  },
+  /** Fast count of clips matching a filter/day-range, for the filter bar badge. */
+  countMatches(filter: ClipTypeFilter, from: string, to: string): Promise<number> {
+    return ipcRenderer.invoke('clips:countMatches', filter, from, to)
+  },
+  /** Copy a stored clip back to the system clipboard by id. */
+  copyClip(id: number): Promise<void> {
+    return ipcRenderer.invoke('clips:copy', id)
   },
   pinClip(id: number): Promise<ClipRecord | null> {
     return ipcRenderer.invoke('clips:pin', id)
@@ -42,6 +80,26 @@ const api = {
   },
   clearClips(): Promise<void> {
     return ipcRenderer.invoke('clips:clear')
+  },
+  /** Aggregate stats for the dashboard. */
+  getStats(): Promise<Stats> {
+    return ipcRenderer.invoke('clips:stats')
+  },
+  /** Usage analytics (busiest hour/day, streaks, top repeated clips) for the dashboard. */
+  getAnalytics(): Promise<Analytics> {
+    return ipcRenderer.invoke('clips:analytics')
+  },
+  /** Every clip captured on a single day, for the dashboard activity-chart drill-down. */
+  getDayDetail(day: string): Promise<DayDetail> {
+    return ipcRenderer.invoke('clips:dayDetail', day)
+  },
+  /** Delete all non-pinned clips within a day range (inclusive). Returns count deleted. */
+  deleteRange(from: string, to: string): Promise<number> {
+    return ipcRenderer.invoke('clips:deleteRange', from, to)
+  },
+  /** Count clips (and how many are pinned) within a day range, for the delete-range preview. */
+  countRange(from: string, to: string): Promise<{ inRange: number; pinnedInRange: number }> {
+    return ipcRenderer.invoke('clips:countRange', from, to)
   },
 
   // --- Settings ---
@@ -61,11 +119,6 @@ const api = {
   },
   chooseDataDir(): Promise<DataDirResult> {
     return ipcRenderer.invoke('dataDir:choose')
-  },
-
-  // --- Clipboard write-back ---
-  writeClip(clip: ClipPayload): void {
-    ipcRenderer.send('clipboard:write', clip)
   },
 
   // --- Window controls ---

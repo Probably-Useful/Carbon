@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { FolderOpen, HardDrive, Keyboard, Power, Trash2, X } from 'lucide-react'
+import { CalendarRange, FolderOpen, HardDrive, Keyboard, Power, Trash2, X } from 'lucide-react'
 import type { Settings } from '../../../shared/types'
 import { eventToAccelerator, prettyAccelerator } from '../lib/hotkey'
 
@@ -9,19 +9,64 @@ interface Props {
   onClose: () => void
   onSettingsChange: (next: Settings) => void
   onClearAll: () => void
+  /** Deletes non-pinned clips in [from, to]; resolves with the number removed. */
+  onDeleteRange: (from: string, to: string) => Promise<number>
+  /** Counts clips within a range (async, backed by an indexed DB query) so the
+   * UI can preview the delete impact without loading the range into memory. */
+  countRange: (from: string, to: string) => Promise<{ inRange: number; pinnedInRange: number }>
 }
 
 export default function SettingsModal({
   settings,
   onClose,
   onSettingsChange,
-  onClearAll
+  onClearAll,
+  onDeleteRange,
+  countRange
 }: Props) {
   const [capturing, setCapturing] = useState(false)
   const [draftHotkey, setDraftHotkey] = useState(settings.hotkey)
   const [hotkeyError, setHotkeyError] = useState<string | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const captureRef = useRef<HTMLButtonElement>(null)
+
+  // Delete-by-date-range state.
+  const [rangeFrom, setRangeFrom] = useState('')
+  const [rangeTo, setRangeTo] = useState('')
+  const [confirmingRange, setConfirmingRange] = useState(false)
+  const [rangeResult, setRangeResult] = useState<string | null>(null)
+
+  const bothSet = Boolean(rangeFrom && rangeTo)
+  const [counts, setCounts] = useState({ inRange: 0, pinnedInRange: 0 })
+
+  useEffect(() => {
+    if (!bothSet) {
+      setCounts({ inRange: 0, pinnedInRange: 0 })
+      return
+    }
+    let cancelled = false
+    countRange(rangeFrom, rangeTo).then((result) => {
+      if (!cancelled) setCounts(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [bothSet, rangeFrom, rangeTo, countRange])
+
+  const deletable = Math.max(counts.inRange - counts.pinnedInRange, 0)
+
+  const resetRange = () => {
+    setRangeResult(null)
+    setConfirmingRange(false)
+  }
+
+  const runDeleteRange = async () => {
+    const n = await onDeleteRange(rangeFrom, rangeTo)
+    setRangeResult(`Deleted ${n} clip${n === 1 ? '' : 's'}.`)
+    setConfirmingRange(false)
+    setRangeFrom('')
+    setRangeTo('')
+  }
 
   const [dataDir, setDataDir] = useState('')
   const [dirStatus, setDirStatus] = useState<string | null>(null)
@@ -174,6 +219,70 @@ export default function SettingsModal({
               </div>
             </div>
             <Toggle on={settings.launchAtStartup} onClick={toggleStartup} />
+          </section>
+
+          {/* Delete by date range */}
+          <section className="rounded-lg border border-carbon-700 bg-carbon-850 px-3 py-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              <CalendarRange size={13} /> Delete by date range
+            </div>
+            <p className="mb-2 text-xs leading-relaxed text-zinc-500">
+              Remove all clips captured between two dates. Pinned clips are always kept.
+            </p>
+            <div className="mb-2 flex items-center gap-1.5">
+              <input
+                type="date"
+                value={rangeFrom}
+                max={rangeTo || undefined}
+                onChange={(e) => {
+                  setRangeFrom(e.target.value)
+                  resetRange()
+                }}
+                className="rounded-md border border-carbon-700 bg-carbon-900 px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-accent/60"
+              />
+              <span className="text-[11px] text-zinc-600">–</span>
+              <input
+                type="date"
+                value={rangeTo}
+                min={rangeFrom || undefined}
+                onChange={(e) => {
+                  setRangeTo(e.target.value)
+                  resetRange()
+                }}
+                className="rounded-md border border-carbon-700 bg-carbon-900 px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-accent/60"
+              />
+            </div>
+            {bothSet ? (
+              <p className="mb-2 text-[11px] text-zinc-500">
+                {counts.inRange} in range · {counts.pinnedInRange} pinned kept ·{' '}
+                <span className="text-red-400">{deletable} will be deleted</span>
+              </p>
+            ) : null}
+            {confirmingRange ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={runDeleteRange}
+                  className="flex-1 rounded-lg bg-red-500 py-2 text-xs font-semibold text-white transition hover:bg-red-600"
+                >
+                  Delete {deletable} clip{deletable === 1 ? '' : 's'}
+                </button>
+                <button
+                  onClick={() => setConfirmingRange(false)}
+                  className="rounded-lg border border-carbon-700 px-3 py-2 text-xs text-zinc-300 transition hover:bg-carbon-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingRange(true)}
+                disabled={!bothSet || deletable === 0}
+                className="w-full rounded-lg border border-red-500/40 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Delete range
+              </button>
+            )}
+            {rangeResult ? <p className="mt-2 text-xs text-accent">{rangeResult}</p> : null}
           </section>
 
           {/* Danger zone */}

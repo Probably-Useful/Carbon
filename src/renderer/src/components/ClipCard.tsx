@@ -1,18 +1,43 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Copy, Pin, Trash2 } from 'lucide-react'
+import { Check, Copy, Pin, Repeat2, Trash2 } from 'lucide-react'
 import type { ClipRecord } from '../../../shared/types'
 import { clipTime, classifyText } from '../lib/format'
+import { highlightMatches } from '../lib/highlight'
 
 interface Props {
   clip: ClipRecord
   onCopy: (clip: ClipRecord) => void
   onPin: (clip: ClipRecord) => void
   onDelete: (id: number) => void
+  highlightQuery?: string
 }
 
-export default function ClipCard({ clip, onCopy, onPin, onDelete }: Props) {
+export default function ClipCard({ clip, onCopy, onPin, onDelete, highlightQuery }: Props) {
   const [copied, setCopied] = useState(false)
+  // Image bytes are fetched on demand once the card scrolls into view, so
+  // opening the app no longer loads every image up front.
+  const [imgUrl, setImgUrl] = useState<string | undefined>(clip.dataUrl)
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (clip.type !== 'image' || imgUrl) return
+    const el = cardRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          observer.disconnect()
+          window.carbon.getImage(clip.id).then((url) => {
+            if (url) setImgUrl(url)
+          })
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [clip.id, clip.type, imgUrl])
 
   const handleCopy = () => {
     onCopy(clip)
@@ -30,6 +55,7 @@ export default function ClipCard({ clip, onCopy, onPin, onDelete }: Props) {
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.16 }}
       onDoubleClick={handleCopy}
+      ref={cardRef}
       className="group relative overflow-hidden rounded-xl border border-carbon-700/70 bg-carbon-850/80 p-3 transition hover:border-accent/40 hover:bg-carbon-800"
     >
       <div className="mb-2 flex items-center justify-between">
@@ -38,25 +64,40 @@ export default function ClipCard({ clip, onCopy, onPin, onDelete }: Props) {
           <span className="rounded-full bg-carbon-700/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-400">
             {tag}
           </span>
+          {clip.copyCount > 1 ? (
+            <span
+              title={`Copied ${clip.copyCount} times`}
+              className="flex items-center gap-0.5 rounded-full bg-carbon-700/50 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500"
+            >
+              <Repeat2 size={10} />
+              {clip.copyCount}
+            </span>
+          ) : null}
         </div>
         <span className="font-mono text-[11px] text-zinc-500">{clipTime(clip.createdAt)}</span>
       </div>
 
       {clip.type === 'image' ? (
         <div className="overflow-hidden rounded-lg border border-carbon-700 bg-carbon-950">
-          <img
-            src={clip.dataUrl}
-            alt="clipboard"
-            className="max-h-44 w-full object-contain"
-            draggable={false}
-          />
+          {imgUrl ? (
+            <img
+              src={imgUrl}
+              alt="clipboard"
+              className="max-h-44 w-full object-contain"
+              draggable={false}
+            />
+          ) : (
+            <div className="grid h-24 w-full animate-pulse place-items-center text-[11px] text-zinc-600">
+              Loading image…
+            </div>
+          )}
           <div className="px-2 py-1 text-[11px] text-zinc-500">
             {clip.width} × {clip.height}px
           </div>
         </div>
       ) : (
         <p className="text-selectable max-h-32 overflow-hidden whitespace-pre-wrap break-words text-[13px] leading-relaxed text-zinc-200">
-          {clip.text}
+          {highlightQuery ? highlightMatches(clip.text ?? '', highlightQuery) : clip.text}
         </p>
       )}
 

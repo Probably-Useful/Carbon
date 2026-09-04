@@ -16,10 +16,15 @@
     "build:unpack": "electron-vite build && electron-builder --dir"
   },
   "dependencies": {
+    "better-sqlite3": "^11.8.1",
     "electron-updater": "^6.3.4",
-    "lucide-react": "^0.441.0"
+    "lucide-react": "^0.441.0",
+    "react-window": "^2.3.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "electron": "^31.4.0",
@@ -29,8 +34,6 @@
     "postcss": "^8.4.45",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
     "vite": "^5.4.3"
